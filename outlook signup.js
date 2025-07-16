@@ -1,176 +1,242 @@
-import re
-import asyncio
-import random
-import string
-import traceback
-from pyrogram import Client, filters, enums
-from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, Message
-from yt_dlp import YoutubeDL
-from functions.user_database import yt_data  # replace with your actual import
+(async function() {
+  function log(msg, ...rest) { console.log(`[AutoLogin] ${msg}`, ...rest); }
 
-# Regex for YouTube URLs
-YT_LINK_RE = re.compile(
-    r'(https?://)?(www\.)?(youtube\.com/watch\?v=|youtu\.be/|youtube\.com/shorts/)[\w-]+'
-)
+  // ----------- Ask for Email (Interactive) -----------
+  let userEmail = prompt("Please enter your email:");
+  if (!userEmail) {
+    log("No email provided. Exiting script.");
+    return;
+  }
 
-def generate_id(length=8):
-    return ''.join(random.choices(string.ascii_letters + string.digits, k=length))
+  // ----------- Fill Email -----------
+  const emailInput = document.querySelector('input[type="email"][name="New email"]');
+  if (!emailInput) return log('Email input not found!');
+  const nativeEmailSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+  nativeEmailSetter.call(emailInput, userEmail);
+  emailInput.dispatchEvent(new Event('input', { bubbles: true }));
+  log('Email filled.');
 
-def sizeof_fmt(num, suffix='B'):
-    for unit in ['','K','M','G','T']:
-        if abs(num) < 1024.0:
-            return "%3.1f%s%s" % (num, unit, suffix)
-        num /= 1024.0
-    return "%.1fP%s" % (num, suffix)
+  // ----------- Click Next Button -----------
+  const nextButton = document.querySelector('button[type="submit"][data-testid="primaryButton"]');
+  if (!nextButton) return log('"Next" button not found!');
+  nextButton.click();
+  log('Clicked "Next" after email.');
 
-YTDL_OPTS = {
-    'skip_download': True,
-    'quiet': True,
-    'no_warnings': True,
-    'cookiefile': 'cookies.txt',
-    'restrictfilenames': True,
-    'format': 'bestvideo*+bestaudio/best',
-    'forcejson': True,
-    'extract_flat': False,
-    'noplaylist': True,
-    'cachedir': False,
-    'outtmpl': '%(id)s.%(ext)s'
-}
-
-def process_yt_link(link: str, user_id: int) -> dict:
-    data = {}
-    try:
-        with YoutubeDL(YTDL_OPTS) as ydl:
-            info = ydl.extract_info(link, download=False)
-        formats = info.get('formats', [])
-        video_formats = []
-        audio_formats = []
-        has_audio = False
-
-        for f in formats:
-            if not f.get("url", "").startswith("https"):
-                continue
-            fmt_data = {
-                "format_id": f.get('format_id'),
-                "ext": f.get('ext'),
-                "format_note": f.get('format_note'),
-                "height": f.get('height'),
-                "width": f.get('width'),
-                "fps": f.get('fps'),
-                "vcodec": f.get('vcodec'),
-                "acodec": f.get('acodec'),
-                "filesize": sizeof_fmt(f['filesize']) if f.get('filesize') else None,
-                "filesize_bytes": f.get('filesize') or 0,
-                "url": f.get('url'),
-                "tbr": f.get('tbr'),
-                "abr": f.get('abr'),
-                "asr": f.get('asr')
-            }
-            # Set audio=None for video-only formats
-            if f.get('vcodec') != 'none' and f.get('acodec') == 'none':
-                fmt_data['audio'] = None
-                video_formats.append(fmt_data)
-            elif f.get('acodec') != 'none' and f.get('vcodec') == 'none':
-                audio_formats.append(fmt_data)
-            elif f.get('acodec') != 'none' and f.get('vcodec') != 'none':
-                video_formats.append(fmt_data)
-                has_audio = True
-
-        doc_key = generate_id()
-        data = {
-            "_id": doc_key,
-            "link": link,
-            "title": info.get('title'),
-            "duration": info.get('duration'),
-            "thumbnail": info.get('thumbnail'),
-            "uploader": info.get('uploader'),
-            "video_formats": video_formats,
-            "audio_formats": audio_formats,
-            "has_audio": has_audio,
-            "user_id": user_id,
-            "yt_id": info.get('id')
+  // ----------- Wait for Password Input -----------
+  function waitForPasswordInput(timeout = 10000) {
+    return new Promise((resolve, reject) => {
+      const start = Date.now();
+      const interval = setInterval(() => {
+        const passwordInput = document.querySelector('input[type="password"]#floatingLabelInput12');
+        if (passwordInput) {
+          clearInterval(interval);
+          log('Password input appeared after', ((Date.now() - start) / 1000).toFixed(2), 'seconds.');
+          resolve(passwordInput);
         }
-        yt_data.insert_one(data)
-    except Exception as e:
-        traceback.print_exc()
-        raise RuntimeError(f"YT-DLP error: {e}")
-    return data
+        if (Date.now() - start > timeout) {
+          clearInterval(interval);
+          reject('Password input did not appear within 10 seconds.');
+        }
+      }, 200);
+    });
+  }
 
-def build_inline_keyboard(doc: dict):
-    # --- Video ---
-    video_rows = []
-    video_rows.append([InlineKeyboardButton("🎬 Videos", callback_data="dummy_videos")])
+  // ----------- Wait for Month Dropdown -----------
+  function waitForMonthDropdown(timeout = 10000) {
+    return new Promise((resolve, reject) => {
+      const start = Date.now();
+      const interval = setInterval(() => {
+        const monthDropdownBtn = document.getElementById('BirthMonthDropdown');
+        if (monthDropdownBtn) {
+          clearInterval(interval);
+          log('Month dropdown appeared after', ((Date.now() - start) / 1000).toFixed(2), 'seconds.');
+          resolve(monthDropdownBtn);
+        }
+        if (Date.now() - start > timeout) {
+          clearInterval(interval);
+          reject('Month dropdown did not appear within 10 seconds.');
+        }
+      }, 200);
+    });
+  }
 
-    # Map (height, fps) -> format with largest filesize
-    unique_video_formats = {}
-    for vfmt in doc['video_formats']:
-        height = vfmt.get('height')
-        fps = int(vfmt.get('fps') or 0)
-        key = (height, fps)
-        if key not in unique_video_formats or vfmt.get('filesize_bytes', 0) > unique_video_formats[key].get('filesize_bytes', 0):
-            unique_video_formats[key] = vfmt
+  // ----------- Wait for Month Options -----------
+  function waitForMonthOptions(timeout = 2000) {
+    return new Promise((resolve, reject) => {
+      const start = Date.now();
+      const interval = setInterval(() => {
+        const options = Array.from(document.querySelectorAll('[role="option"],li,div'))
+          .filter(el =>
+            el.textContent.trim().match(/^(January|February|March|April|May|June|July|August|September|October|November|December)$/)
+          );
+        if (options.length) {
+          clearInterval(interval);
+          resolve(options);
+        }
+        if (Date.now() - start > timeout) {
+          clearInterval(interval);
+          reject('Month options did not appear');
+        }
+      }, 100);
+    });
+  }
 
-    # Sort by height desc, then fps desc
-    sorted_formats = sorted(
-        unique_video_formats.values(),
-        key=lambda x: ((x['height'] or 0), int(x.get('fps') or 0)),
-        reverse=True
-    )
+  // ----------- Wait for Day Dropdown -----------
+  function waitForDayDropdown(timeout = 10000) {
+    return new Promise((resolve, reject) => {
+      const start = Date.now();
+      const interval = setInterval(() => {
+        const dropdownBtn = document.getElementById('BirthDayDropdown');
+        if (dropdownBtn) {
+          clearInterval(interval);
+          log('Day dropdown appeared after', ((Date.now() - start) / 1000).toFixed(2), 'seconds.');
+          resolve(dropdownBtn);
+        }
+        if (Date.now() - start > timeout) {
+          clearInterval(interval);
+          reject('Day dropdown did not appear within 10 seconds.');
+        }
+      }, 200);
+    });
+  }
 
-    # Show 3 per row
-    for i in range(0, len(sorted_formats), 3):
-        row = []
-        for vfmt in sorted_formats[i:i+3]:
-            label = ""
-            if vfmt.get('height'):
-                label += f"{vfmt['height']}p"
-            else:
-                label += "audio+video"
-            if vfmt.get('fps'):
-                label += f"@{vfmt['fps']}"
-            if vfmt.get('filesize'):
-                label += f" | {vfmt['filesize']}"
-            cb = f"dl_{doc['_id']}_{vfmt['format_id']}"
-            row.append(InlineKeyboardButton(label, callback_data=cb))
-        video_rows.append(row)
+  // ----------- Wait for Day Options -----------
+  function waitForDayOptions(timeout = 2000) {
+    return new Promise((resolve, reject) => {
+      const start = Date.now();
+      const interval = setInterval(() => {
+        const options = Array.from(document.querySelectorAll('[role="option"],li,div'))
+          .filter(el => /^\d{1,2}$/.test(el.textContent.trim()) && Number(el.textContent.trim()) >= 1 && Number(el.textContent.trim()) <= 31);
+        if (options.length) {
+          clearInterval(interval);
+          resolve(options);
+        }
+        if (Date.now() - start > timeout) {
+          clearInterval(interval);
+          reject('Day options did not appear');
+        }
+      }, 100);
+    });
+  }
 
-    # --- Audio ---
-    audio_rows = [[InlineKeyboardButton("🎵 Audios", callback_data="dummy_audios")]]
-    audios = sorted(doc['audio_formats'], key=lambda x: int(x.get('abr', 0) or 0), reverse=True)
-    for i in range(0, len(audios), 3):
-        row = []
-        for a in audios[i:i+3]:
-            label = f"{a['ext']} {a.get('abr', 'N/A')}kbps"
-            if a.get('filesize'):
-                label += f" ({a['filesize']})"
-            cb = f"dl_{doc['_id']}_{a['format_id']}"
-            row.append(InlineKeyboardButton(label, callback_data=cb))
-        audio_rows.append(row)
+  // ----------- Wait for Year Input -----------
+  function waitForYearInput(timeout = 5000) {
+    return new Promise((resolve, reject) => {
+      const start = Date.now();
+      const interval = setInterval(() => {
+        const yearInput = document.querySelector('input[type="number"][name="BirthYear"][id="floatingLabelInput22"]');
+        if (yearInput) {
+          clearInterval(interval);
+          resolve(yearInput);
+        }
+        if (Date.now() - start > timeout) {
+          clearInterval(interval);
+          reject('Year input did not appear');
+        }
+      }, 200);
+    });
+  }
 
-    markup = []
-    markup.extend(video_rows)
-    markup.extend(audio_rows)
-    return InlineKeyboardMarkup(markup)
+  // ----------- Wait for First/Last Name Inputs -----------
+  function waitForNameInputs(timeout = 10000) {
+    return new Promise((resolve, reject) => {
+      const start = Date.now();
+      const interval = setInterval(() => {
+        const firstNameInput = document.querySelector('input[type="text"]#firstNameInput[name="firstNameInput"]');
+        const lastNameInput = document.querySelector('input[type="text"]#lastNameInput[name="lastNameInput"]');
+        if (firstNameInput && lastNameInput) {
+          clearInterval(interval);
+          log('Name fields appeared after', ((Date.now() - start) / 1000).toFixed(2), 'seconds.');
+          resolve({ firstNameInput, lastNameInput });
+        }
+        if (Date.now() - start > timeout) {
+          clearInterval(interval);
+          reject('Name fields did not appear within 10 seconds.');
+        }
+      }, 200);
+    });
+  }
 
-@Client.on_message(filters.regex(YT_LINK_RE, flags=re.IGNORECASE) & filters.private)
-async def yt_link_handler(client: Client, message: Message):
-    link = re.search(YT_LINK_RE, message.text.strip()).group(0)
-    user_id = message.from_user.id
-    msg = await message.reply("🔎 Processing YouTube link, please wait...")
+  // ----------- Click Next Button (generic) -----------
+  function clickNextButton(timeout = 2000) {
+    return new Promise((resolve, reject) => {
+      const start = Date.now();
+      const interval = setInterval(() => {
+        const nextButton = document.querySelector('button[type="submit"][data-testid="primaryButton"]');
+        if (nextButton) {
+          clearInterval(interval);
+          nextButton.click();
+          resolve(true);
+        }
+        if (Date.now() - start > timeout) {
+          clearInterval(interval);
+          reject('"Next" button not found');
+        }
+      }, 100);
+    });
+  }
 
-    try:
-        doc = await asyncio.to_thread(process_yt_link, link, user_id)
-        caption = (
-            f"**{doc.get('title', 'No Title')}**\n"
-            f"Duration: `{doc.get('duration', 'N/A')}` seconds\n"
-            f"[Thumbnail]({doc.get('thumbnail')})"
-        )
-        markup = build_inline_keyboard(doc)
-        await msg.edit(
-            caption, 
-            reply_markup=markup,
-            disable_web_page_preview=False,
-            parse_mode=enums.ParseMode.MARKDOWN
-        )
-    except Exception as err:
-        await msg.edit(f"❌ Error: {err}")
+  try {
+    // ----------- PASSWORD (Default) -----------
+    const passwordInput = await waitForPasswordInput(10000);
+    const nativePasswordSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+    nativePasswordSetter.call(passwordInput, 'Appus123/');
+    passwordInput.dispatchEvent(new Event('input', { bubbles: true }));
+    log('Password filled.');
+    await new Promise(res => setTimeout(res, 200));
+    const nextButton2 = document.querySelector('button[type="submit"][data-testid="primaryButton"]');
+    if (!nextButton2) return log('"Next" button (after password) not found!');
+    nextButton2.click();
+    log('Clicked "Next" after password.');
+
+    // ----------- DOB: Month (Random) -----------
+    const monthDropdownBtn = await waitForMonthDropdown(10000);
+    monthDropdownBtn.click();
+    const monthOptions = await waitForMonthOptions(2500);
+    const randomMonth = monthOptions[Math.floor(Math.random() * monthOptions.length)];
+    randomMonth.click();
+    log('Selected random month:', randomMonth.textContent.trim());
+
+    // ----------- DOB: Day (Random) -----------
+    const dayDropdownBtn = await waitForDayDropdown(10000);
+    dayDropdownBtn.click();
+    const dayOptions = await waitForDayOptions(2500);
+    const randomDay = dayOptions[Math.floor(Math.random() * dayOptions.length)];
+    randomDay.click();
+    log('Selected random day:', randomDay.textContent.trim());
+
+    // ----------- DOB: Year (Default) -----------
+    const yearInput = await waitForYearInput(5000);
+    const nativeYearSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+    nativeYearSetter.call(yearInput, '1999');
+    yearInput.dispatchEvent(new Event('input', { bubbles: true }));
+    yearInput.dispatchEvent(new Event('change', { bubbles: true }));
+    log('Set year to 1999');
+
+    // Click Next after DOB
+    await new Promise(res => setTimeout(res, 250));
+    await clickNextButton();
+    log('Clicked Next button on DOB step.');
+
+    // ----------- Wait for Name Inputs (Default) -----------
+    const { firstNameInput, lastNameInput } = await waitForNameInputs(10000);
+
+    const nativeFirstNameSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+    nativeFirstNameSetter.call(firstNameInput, 'Appu');
+    firstNameInput.dispatchEvent(new Event('input', { bubbles: true }));
+    log('First name entered.');
+
+    const nativeLastNameSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+    nativeLastNameSetter.call(lastNameInput, 'john');
+    lastNameInput.dispatchEvent(new Event('input', { bubbles: true }));
+    log('Last name entered.');
+
+    // Click Next after Names
+    await new Promise(res => setTimeout(res, 250));
+    await clickNextButton();
+    log('Clicked Next button on Name step.');
+
+  } catch (err) {
+    log(err);
+  }
+})();
